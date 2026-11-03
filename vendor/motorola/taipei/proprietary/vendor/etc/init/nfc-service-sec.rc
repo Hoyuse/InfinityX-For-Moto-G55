@@ -1,0 +1,7 @@
+on boot
+    start vendor.nfc_hal_service
+
+service vendor.nfc_hal_service /vendor/bin/hw/android.hardware.nfc-service.sec
+    class hal
+    user nfc
+    group nfc

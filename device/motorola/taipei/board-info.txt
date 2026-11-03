@@ -1,0 +1,3 @@
+require board=taipei
+require board=taipei_g_sys
+require board=MT6855

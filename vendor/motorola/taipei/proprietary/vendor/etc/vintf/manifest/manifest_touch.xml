@@ -1,0 +1,11 @@
+<manifest version="1.0" type="device">
+    <!-- motorola touch -->
+    <hal format="aidl" override="true">
+        <name>com.motorola.hardware.display.touch</name>
+        <version>4</version>
+        <interface>
+            <name>IMotTouch</name>
+            <instance>default</instance>
+        </interface>
+    </hal>
+</manifest>

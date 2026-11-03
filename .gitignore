@@ -1,0 +1,20 @@
+# Large firmware archives and OTA packages
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# Symlinks and external ROM trees
+infinity-16
+sync.log
+
+# Temporary and local tool packages
+tools/pkg/
+tools/local/
+.~lock.*
+*.tmp
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db
