@@ -78,12 +78,33 @@ git clone https://github.com/Hoyuse/InfinityX-For-Moto-G55.git device/motorola/t
 # (or place the device and vendor folders inside device/motorola/taipei and vendor/motorola/taipei)
 ```
 
-### 3. Setup Environment & Compile
+### 3. Extract the Stock Vendor Images
+The initial bringup uses the stock `vendor`, `vendor_dlkm` and `system_dlkm`
+images as prebuilts (they are not tracked in git). Place the stock CFC zip
+(`RETBR_XT2435-1_TAIPEI_G_SYS_W1UTS36.51_39_4_..._CFC.xml.zip`) in the project
+root, build the host tools once, then run the extraction script:
 ```bash
+m simg2img lpunpack lpdump            # inside the ROM tree, after lunch
+tools/extract_stock_images.sh         # -> device/motorola/taipei-images/ + euicc/EuiccGoogle.apk
+```
+
+### 4. Setup Environment & Compile
+The host needs `zip` (it's in `tools/local/usr/bin` if you can't install it
+system-wide). If your shell aliases `grep` (for example to `ugrep`), run the
+build in a clean shell, or `lunch` silently falls back to `aosp_arm64`:
+```bash
+env -i HOME=$HOME USER=$USER TERM=dumb PATH="$PWD/tools/local/usr/bin:/usr/local/bin:/usr/bin:/bin" \
+    bash --noprofile --norc
+cd infinity-16
 source build/envsetup.sh
 lunch infinity_taipei-userdebug
 m bacon -j$(nproc --all)
 ```
+
+> ⚠️ **Flashing safety:** never run the stock `flashfile.xml` unmodified: it
+> contains `erase nvdata`. Never flash or erase `nvram`, `nvdata`, `nvcfg`,
+> `protect1/2`, `persist`, `prodpersist`, `proinfo`, `efuse*`, `gpt` or
+> `preloader`, and never relock the bootloader on custom images.
 
 ---
 
@@ -93,3 +114,4 @@ m bacon -j$(nproc --all)
 - **[LineageOS Project](https://github.com/LineageOS)** for AOSP device trees and hardware interfaces.
 - **Motorola Mobility LLC** for stock firmware baseline and hardware drivers.
 - Maintained and ported by **[Hoyuse](https://github.com/Hoyuse)**.
+
