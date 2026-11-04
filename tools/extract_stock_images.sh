@@ -56,8 +56,14 @@ echo "==> SHA-256"
 ( cd "${OUT}" && sha256sum vendor.img vendor_dlkm.img system_dlkm.img | tee SHA256SUMS )
 
 echo "==> Extracting EuiccGoogle LPA from stock product"
-export LD_LIBRARY_PATH="${PROJECT_ROOT}/tools/local/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
-DUMP_EROFS="${PROJECT_ROOT}/tools/local/usr/bin/dump.erofs"
+# Prefer the project-local erofs-utils (tools/local, not in git); otherwise use
+# the system one (Debian/Ubuntu package: erofs-utils).
+if [ -x "${PROJECT_ROOT}/tools/local/usr/bin/dump.erofs" ]; then
+    export LD_LIBRARY_PATH="${PROJECT_ROOT}/tools/local/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
+    DUMP_EROFS="${PROJECT_ROOT}/tools/local/usr/bin/dump.erofs"
+else
+    DUMP_EROFS="$(command -v dump.erofs)" || { echo "Missing dump.erofs (apt install erofs-utils)"; exit 1; }
+fi
 EUICC_DIR="${PROJECT_ROOT}/device/motorola/taipei/euicc"
 "${DUMP_EROFS}" --cat --path=/priv-app/EuiccGoogle/EuiccGoogle.apk "${WORK}/product.img" \
     > "${EUICC_DIR}/EuiccGoogle.apk"

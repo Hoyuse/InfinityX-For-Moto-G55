@@ -67,7 +67,7 @@ Unofficial Project Infinity-X (Android 16 / SDK 36) bringup and device tree adap
 ### 1. Initialize & Sync Infinity-X Android 16
 ```bash
 mkdir infinity-16 && cd infinity-16
-repo init -u https://github.com/Project-Infinity-X/manifest -b 16 --git-lfs
+repo init -u https://github.com/ProjectInfinity-X/manifest -b 16 --git-lfs
 repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 ```
 

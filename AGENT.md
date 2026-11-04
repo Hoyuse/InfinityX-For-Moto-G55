@@ -1,5 +1,209 @@
 # Contexto del proyecto: ROM para Moto G55 5G
 
+> **Para cualquier agente o persona que llegue nuevo:** la sección
+> **"GUÍA DE COMPILACIÓN (estado actual)"** de abajo es la referencia vigente.
+> Todo lo que viene después de "Historial" es registro histórico: algunas
+> decisiones de ahí ya se revirtieron (vendor construido desde blobs,
+> `prebuilt/dtb.dtb`, `DEVICE_MANIFEST_FILE`, sepolicy de vendor propia).
+
+---
+
+# GUÍA DE COMPILACIÓN (estado actual, 2026-11-03)
+
+## 0. Estado del proyecto
+
+- **Producto:** `infinity_taipei-userdebug` (Project Infinity-X 3.12, Android 16 / SDK 36, GAPPS).
+- **Dispositivo:** Moto G55 5G `taipei`, XT2435-1, MT6855 (Dimensity 7025), firmware stock `W1UTS36.51-39-4`.
+- **Estrategia de arranque inicial:** se usan las imágenes **stock** `vendor`, `vendor_dlkm` y
+  `system_dlkm` como prebuilts (`BOARD_PREBUILT_*IMAGE`). La ROM solo construye `system`,
+  `system_ext`, `product`, `boot`, `vendor_boot`, `dtbo`, `vbmeta` y `vbmeta_system`.
+- **Verificado compilando** (en el PC de escritorio):
+  - `m selinux_policy bootimage vendorbootimage` → OK.
+  - `vendor_boot.img` idéntico a stock en cabecera v4, direcciones de carga, cmdline
+    (`bootopt=64S3,32N2,64N2 ...`), bootconfig y DTB (byte a byte, con cabecera DT-table `0xd7b7ab1e`).
+  - Ramdisk first-stage con los **195 módulos** stock y `modules.load` idéntico al stock.
+  - Kernel de `boot.img` idéntico al stock.
+- **Aún NO verificado:** `m bacon` completo (incluye la comprobación VINTF, `vbmeta` y `super`).
+  El primer intento en el escritorio falló por **inestabilidad de RAM del PC** (ver sección 7),
+  no por el árbol.
+
+## 1. Requisitos de la máquina
+
+| Recurso | Mínimo | Recomendado |
+|---|---|---|
+| SO | Linux x86_64 (Debian 12/13 o Ubuntu 22.04/24.04) | igual |
+| RAM | 16 GB + 32 GB de swap/zram, compilando con `-j4` | 32 GB o más |
+| Disco libre (SSD) | ~300 GB | 400 GB o más |
+| Tiempo (primera compilación) | 6–12 h en un laptop | 2–4 h en un equipo potente |
+
+Espacio medido en el escritorio: fuente 120 GB (incluye `.repo` de 29 GB). `out/` supera los
+150 GB en una compilación completa. `ccache` es opcional (+40 GB).
+
+> **Laptop:** conéctalo a la corriente, ponlo sobre una superficie dura y vigila la temperatura.
+> Con 16 GB de RAM usa `-j4` como mucho, o el enlazado de Java/Kotlin se queda sin memoria.
+
+Paquetes del sistema (Debian/Ubuntu):
+```bash
+sudo apt install git git-lfs curl python3 python-is-python3 rsync zip unzip \
+    erofs-utils lz4 bc bison flex build-essential libssl-dev libncurses-dev \
+    fontconfig libxml2-utils xsltproc
+# repo (si no está en la distro):
+mkdir -p ~/.local/bin && curl -o ~/.local/bin/repo https://storage.googleapis.com/git-repo-downloads/repo && chmod +x ~/.local/bin/repo
+git lfs install
+```
+**`zip` es obligatorio**: sin él falla `external/guice` a mitad de la compilación.
+(En el escritorio se puso una copia en `tools/local/usr/bin`, que no está en git.)
+
+## 2. Descargar el código de Infinity-X (rama 16)
+
+```bash
+mkdir -p ~/infinity-16 && cd ~/infinity-16
+repo init -u https://github.com/ProjectInfinity-X/manifest -b 16 --git-lfs
+repo sync -c -j8 --force-sync --no-clone-bundle --no-tags --optimized-fetch --prune
+```
+- La URL correcta es **`ProjectInfinity-X`** (sin guion).
+- Son ~1.170 repositorios. Si la red corta, repite el `repo sync`: continúa donde se quedó.
+- No hace falta ningún parche local: la colisión de protobuf
+  (`prebuilts/misc/protobuf_vendorcompat` frente a `hardware/lineage/compat`) ya viene resuelta en
+  `vendor/infinity/config/common.mk` con `PRODUCT_SOURCE_ROOT_DIRS += -prebuilts/misc/protobuf_vendorcompat`.
+
+## 3. Traer este repositorio y el material que NO está en git
+
+```bash
+cd ~
+git clone https://github.com/Hoyuse/InfinityX-For-Moto-G55.git "Rom moto g55"
+cd "Rom moto g55"
+ln -s ~/infinity-16 infinity-16            # los scripts esperan este enlace
+rsync -a --delete device/motorola/taipei/ infinity-16/device/motorola/taipei/
+```
+
+**Importante:** `infinity-16/device/motorola/taipei` es una **copia** del árbol del repo, no un
+enlace. Después de cada cambio en el repo, vuelve a ejecutar el `rsync` antes de compilar.
+
+Archivos que no están en git y que hay que conseguir (elige UNA opción):
+
+- **Opción A (rápida): copiarlos del PC de escritorio**
+  ```bash
+  # en el escritorio → al laptop (USB o red), ~920 MB en total
+  ~/infinity-16/device/motorola/taipei-images/   (vendor.img, vendor_dlkm.img, system_dlkm.img, SHA256SUMS)
+  "Rom moto g55"/device/motorola/taipei/euicc/EuiccGoogle.apk
+  ```
+  Colócalos en las mismas rutas del laptop y comprueba la integridad:
+  ```bash
+  cd ~/infinity-16/device/motorola/taipei-images && sha256sum -c SHA256SUMS
+  ```
+  SHA-256 esperados:
+  - `vendor.img` `b38d47dab5e86013f7349a5c3cf97c4583a123168c4da2b7e75614221c5911fd`
+  - `vendor_dlkm.img` `dbe8997ccab498da6f45ef3bde6c22facaffeac9692e15a2b1500478d354387d`
+  - `system_dlkm.img` `2961e65aafd304900a678c26aec100d3b2f638c3a094c4492ffc16ed18a8a667`
+
+  Después copia el APK también al árbol de compilación:
+  `rsync -a device/motorola/taipei/ infinity-16/device/motorola/taipei/`
+
+- **Opción B: extraerlos del firmware stock**
+  1. Copia el zip stock (5,6 GB) a la raíz del proyecto:
+     `RETBR_XT2435-1_TAIPEI_G_SYS_W1UTS36.51_39_4_subsidy_DEFAULT_regulatory_DEFAULT_cid50_CFC.xml.zip`
+     (SHA-256 `05d182531134ef5dcceab60cb6de0140c221bd8265e510f5ddf1d0af0d10f075`).
+  2. Compila las herramientas de imágenes (usa el entorno limpio de la sección 4):
+     `m simg2img lpunpack lpdump`
+  3. Ejecuta `tools/extract_stock_images.sh`. Necesita ~25 GB temporales en `work/` y deja las
+     imágenes en `infinity-16/device/motorola/taipei-images/` y el APK en
+     `device/motorola/taipei/euicc/`.
+  4. `rsync -a device/motorola/taipei/ infinity-16/device/motorola/taipei/`
+
+## 4. Compilar
+
+Usa **siempre un shell limpio**. Si `grep` tiene un alias (por ejemplo a `ugrep`), `envsetup.sh`
+se rompe y `lunch` cae en silencio a `aosp_arm64`. El síntoma es el error de módulos protobuf
+duplicados, que despista porque parece otro problema.
+
+```bash
+cd ~/"Rom moto g55"
+env -i HOME=$HOME USER=$USER TERM=xterm \
+    PATH="$PWD/tools/local/usr/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin" \
+    bash --noprofile --norc
+cd ~/infinity-16
+source build/envsetup.sh
+lunch infinity_taipei-userdebug
+echo $TARGET_PRODUCT                       # DEBE decir infinity_taipei
+m bacon -j4                                # laptop 16 GB: -j4 | 32 GB: -j8 | escritorio: -j$(nproc)
+```
+
+- Si se corta, vuelve a ejecutar `m bacon`: reanuda desde donde se quedó.
+- Resultado: `out/target/product/taipei/Project_Infinity-X-*-taipei-*.zip`, más las imágenes
+  sueltas (`boot.img`, `vendor_boot.img`, `dtbo.img`, `vbmeta.img`, `vbmeta_system.img`, `super_empty.img`, etc.).
+- Hay un script con reintentos automáticos ante cierres esporádicos:
+  `work/build-logs/run_bacon.sh` (en el escritorio, no está en git).
+- Para comprobar antes la parte de arranque (unos minutos):
+  `m selinux_policy bootimage vendorbootimage`
+
+## 5. Verificar las imágenes antes de flashear
+
+```bash
+H=out/host/linux-x86/bin; O=out/target/product/taipei
+$H/unpack_bootimg --boot_img $O/vendor_boot.img --out /tmp/vb | grep -E 'load address|command line|dtb size'
+#   kernel 0x40000000 | ramdisk 0x66f00000 | tags 0x47c80000 | dtb size 233690
+#   cmdline: bootopt=64S3,32N2,64N2 loglevel=4 initcall_debug=0 bootconfig
+cat /tmp/vb/bootconfig                   # androidboot.selinux=permissive + kernel.rcu_*
+$H/avbtool info_image --image $O/vbmeta.img | grep -E 'Flags|vbmeta_system'   # Flags: 3
+```
+
+## 6. Seguridad del teléfono (OBLIGATORIO)
+
+- **Nunca flashear ni borrar:** `nvram`, `nvdata`, `nvcfg`, `protect1`, `protect2`, `persist`,
+  `prodpersist`, `proinfo`, `seccfg`, `efuse*`, `gpt`, `preloader`, `lk`, `tee`, `md1img`.
+  Contienen el IMEI, la calibración de radio y datos del módem; sin ellos el módem (y la eSIM) dejan de funcionar.
+- **El `flashfile.xml` stock contiene `erase nvdata`**: nunca lo uses sin editarlo.
+- Antes de flashear: copia con `dd` (con root en stock o mtkclient) de todas esas particiones,
+  verificada con sha256 y guardada en dos sitios. Apunta el IMEI (`*#06#`) y el EID.
+- Solo se flashean: `boot`, `vendor_boot`, `dtbo`, `vbmeta` (con `--disable-verity --disable-verification`),
+  `vbmeta_system` y `super` (desde fastbootd o como `super.img`), y después `fastboot -w`.
+  Antes, `fastboot getvar snapshot-update-status`; si no dice `none`: `fastboot snapshot-update cancel`.
+- **Nunca volver a bloquear el bootloader** con imágenes custom (en Motorola deja el teléfono inservible).
+- Al restablecer de fábrica, **no marcar "Borrar SIM descargadas"** (borra los perfiles eSIM del chip eUICC).
+
+## 7. Problemas conocidos y soluciones
+
+| Síntoma | Causa | Solución |
+|---|---|---|
+| `lunch` muestra `aosp_arm64` / error de protobuf duplicado | alias de `grep` en el shell | shell limpio (sección 4) |
+| `zip: command not found` en `external/guice` | falta `zip` en el host | `apt install zip` o `tools/local/usr/bin` en el PATH |
+| `soong_ui` se cierra en `finder.go` (SIGSEGV) | caché `files.db` corrupta tras matar un build | `rm out/.module_paths/files.db` y repetir |
+| Cierres aleatorios en `clang` (139), `java` (ClassCastException dentro del JDK), `soong_ui` | **RAM inestable** del PC (pasó en el escritorio: 3 módulos de 16 GB distintos) | memtest86+, usar 2 módulos iguales, BIOS por defecto; mientras tanto `-j` bajo y reintentar |
+| `Key "PRODUCT_NAME" isn't a valid prop override` | Android 16 solo acepta claves Soong | ya corregido: `BuildDesc`/`BuildFingerprint`/`DeviceProduct` |
+| `Incorrect TARGET_2ND_ARCH_VARIANT` | `cortex-a55` necesita `armv8-2a` | ya corregido (`cortex-a76`/`armv8-2a-dotprod`, ya que Soong no tiene `cortex-a78`) |
+| El objetivo `check_vintf_all` no existe | el nombre correcto lleva guiones | `m check-vintf-all` (compila casi todo el sistema) |
+
+SSD del escritorio revisado el 2026-11-03: SMART PASSED, 0 errores de datos, ext4 limpio. El
+problema era la RAM, no el disco. Para revisar el SSD de otra máquina:
+`sudo smartctl -a /dev/nvme0` (paquete `smartmontools`).
+
+## 8. Pendientes
+
+1. Completar el primer `m bacon` y revisar la comprobación VINTF (frameworks de Infinity frente al manifest del vendor stock).
+2. El fstab de segunda etapa (`/vendor/etc/fstab.mt6855`) viene del vendor stock y conserva
+   `formattable` en nvdata/protect/persist. Para aplicar del todo la regla de seguridad hay que
+   reempaquetar `vendor.img` conservando los xattr de SELinux.
+3. Primer arranque: capturar `adb logcat -b all` y `/sys/fs/pstore` si hay bootloop.
+4. Más adelante: pasar de vendor stock prebuilt a vendor construido desde blobs (los archivos
+   siguen en el árbol sin usarse: `taipei-vendor.mk`, `sepolicy/vendor/`, `vintf/`, `rootdir/etc/init.mt6855.rc`).
+
+## 9. Mapa de archivos clave
+
+| Ruta | Qué es |
+|---|---|
+| `device/motorola/taipei/BoardConfig.mk` | kernel/offsets/cmdline/bootconfig, módulos first-stage, AVB, prebuilts de vendor, recovery en vendor_boot |
+| `device/motorola/taipei/device.mk` | particiones dinámicas, VAB con compresión, fastbootd, fstab first-stage, eSIM (EuiccGoogle) |
+| `device/motorola/taipei/infinity_taipei.mk` | producto e huella stock |
+| `device/motorola/taipei/prebuilt/` | `kernel`, `dtbo.img`, `dtb/mt6855.dtb`, `vendor_ramdisk/` (195 `.ko` + `modules.load*`) |
+| `device/motorola/taipei/rootdir/etc/fstab.mt6855` | fstab first-stage (sin `formattable` en particiones del módem) |
+| `device/motorola/taipei/euicc/` | `Android.bp` de EuiccGoogle + permisos (el APK no está en git) |
+| `tools/extract_stock_images.sh` | extrae vendor/vendor_dlkm/system_dlkm y EuiccGoogle del firmware stock |
+
+---
+
+# Historial (registro de trabajo, puede estar desactualizado)
+
 ## Objetivo
 
 El usuario quiere investigar la creación/port de una custom ROM para su Motorola Moto G55 5G, usando como referencia Infinity-X para Moto G54 5G. En este momento se está recolectando y comparando firmware; no se ha comenzado a compilar una ROM ni a modificar el teléfono.
