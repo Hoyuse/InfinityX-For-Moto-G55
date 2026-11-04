@@ -18,3 +18,10 @@ tools/local/
 # OS generated files
 .DS_Store
 Thumbs.db
+
+
+# Stock image extraction workspace and prebuilt vendor images (multi-GB)
+work/
+*-images/
+*.img.raw
+device/motorola/taipei/euicc/*.apk

@@ -1,0 +1,17 @@
+//
+// Copyright (C) 2026 Project Infinity-X
+//
+// Google eUICC LPA from stock taipei product (W1UTS36.51-39-4).
+// Required for eSIM profile management; Infinity-X GApps does not ship it.
+//
+
+android_app_import {
+    name: "EuiccGoogle",
+    apk: "EuiccGoogle.apk",
+    presigned: true,
+    privileged: true,
+    product_specific: true,
+    dex_preopt: {
+        enabled: false,
+    },
+}
