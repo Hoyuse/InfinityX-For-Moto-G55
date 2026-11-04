@@ -23,8 +23,9 @@ PRODUCT_MANUFACTURER := motorola
 
 PRODUCT_GMS_CLIENTID_BASE := android-motorola
 
-# Verified build fingerprint from stock taipei W1UTS36.51-39-4
+# Stock taipei product fingerprint (ro.product.build.fingerprint, W1UTS36M.51-39-4)
+# Android 16 gen_build_prop only accepts Soong product-config keys here.
 PRODUCT_BUILD_PROP_OVERRIDES += \
-    PRODUCT_NAME=taipei_g_sys \
-    TARGET_DEVICE=taipei \
-    BUILD_FINGERPRINT="motorola/taipei_g_sys/taipei:16/W1UTS36.51-39-4/4720d-615a8a:user/release-keys"
+    BuildDesc="taipei_g_sys-user 16 W1UTS36M.51-39-4 615a8a release-keys" \
+    BuildFingerprint=motorola/taipei_g_sys/taipei:16/W1UTS36M.51-39-4/615a8a:user/release-keys \
+    DeviceProduct=taipei_g_sys
